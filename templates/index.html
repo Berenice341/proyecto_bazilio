@@ -1,128 +1,141 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bazilio - ANTLR4 Cloud</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+    <meta charset="UTF-8">
+    <title>Bazilio (ANTLR4)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 350px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
 </head>
-<body class="min-h-screen bg-[#F0FDF4] text-[#14532D] flex items-center justify-center p-4 font-sans">
+<body>
 
-  <main class="w-full max-w-sm bg-white rounded-3xl p-6 border border-[#DCFCE7] shadow-lg space-y-4 text-center">
-    <h1 class="text-xl font-bold tracking-wide">Bazilio (ANTLR4)</h1>
-
-    <!-- Caja de texto amplia -->
-    <textarea 
-      id="input" 
-      rows="4" 
-      spellcheck="false"
-      class="w-full p-3 rounded-2xl bg-[#F8FAFC] border border-[#DCFCE7] outline-none text-sm font-mono resize-none focus:border-[#16A34A]" 
-      placeholder="C4 D4 E4 C4 B3 A3">C4 D4 E4 C4 B3 A3</textarea>
-
-    <!-- Botones independientes -->
-    <div class="grid grid-cols-2 gap-2">
-      <button onclick="playNotes()" class="bg-[#16A34A] hover:bg-[#15803D] text-white text-xs font-bold py-3 rounded-xl transition shadow cursor-pointer">
-        Reproducir
-      </button>
-      <button onclick="downloadWav()" class="bg-[#DCFCE7] hover:bg-[#BBF7D0] text-[#14532D] text-xs font-bold py-3 rounded-xl transition border border-[#86EFAC] cursor-pointer">
-        Guardar Audio
-      </button>
+    <div class="container">
+        <h2>Bazilio (ANTLR4)</h2>
+        <textarea id="codigoMusical">E4 E4 F4 G4 F4 E4 D4 C4 C4 D4 E4 E4 D4 D4</textarea>
+        <br>
+        <button onclick="enviarYReproducir()">Reproducir</button>
+        <p id="estado"></p>
     </div>
 
-    <p id="st" class="text-xs text-[#16A34A] min-h-[1rem]"></p>
-  </main>
+    <script>
+        // Función principal para conectar con Flask y reproducir el audio de forma suave
+        async function enviarYReproducir() {
+            const codigo = document.getElementById('codigoMusical').value;
+            const estado = document.getElementById('estado');
+            estado.innerText = "Procesando...";
 
-  <script>
-    async function getParsedEvents() {
-      const text = document.getElementById('input').value;
-      const res = await fetch('/api/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: text })
-      });
-      const data = await res.json();
-      return data.events || [];
-    }
+            try {
+                // Envía el texto a tu ruta de Flask para que ANTLR4 lo procese
+                const response = await fetch('/parse', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ text: codigo })
+                });
 
-    async function playNotes() {
-      const st = document.getElementById('st');
-      st.textContent = 'Analizando con ANTLR4...';
-      const events = await getParsedEvents();
-      if (!events.length) return st.textContent = 'Ingresa notas válidas (ej. C4 D4 E4).';
+                const data = await response.json();
 
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      st.textContent = 'Reproduciendo...';
+                if (data.success) {
+                    estado.innerText = "Reproduciendo...";
+                    // data.events debe contener las frecuencias o notas calculadas por tu backend
+                    reproducirSecuenciaSuave(data.events);
+                } else {
+                    estado.innerText = "Error en la gramática.";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                estado.innerText = "Error de conexión.";
+            }
+        }
 
-      events.forEach((chord, i) => {
-        const startTime = ctx.currentTime + (i * 0.45);
-        chord.forEach(freq => {
-          if (freq <= 0) return;
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, startTime);
-          
-          gain.gain.setValueAtTime(0.0001, startTime);
-          gain.gain.linearRampToValueAtTime(0.3, startTime + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.4);
-          
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          
-          osc.start(startTime);
-          osc.stop(startTime + 0.45);
-        });
-      });
+        // Sintetizador con Web Audio API optimizado (sin clics, envolvente suave y tono cálido)
+        function reproducirSecuenciaSuave(eventos) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const audioCtx = new AudioContext();
 
-      setTimeout(() => st.textContent = '¡Listo!', events.length * 450);
-    }
+            let tiempoActual = audioCtx.currentTime;
+            const duracionNota = 0.4;  // Duración de cada nota
+            const pausaEntreNotas = 0.1; // Pequeña separación fluida
 
-    async function downloadWav() {
-      const st = document.getElementById('st');
-      st.textContent = 'Generando WAV...';
-      const events = await getParsedEvents();
-      if (!events.length) return st.textContent = 'Ingresa notas válidas.';
+            eventos.forEach((frecuencia, index) => {
+                const inicio = tiempoActual + (index * (duracionNota + pausaEntreNotas));
 
-      const sr = 44100, stepDur = 0.45;
-      const len = Math.ceil(sr * (events.length * stepDur + 0.2));
-      const oCtx = new OfflineAudioContext(1, len, sr);
+                // 1. Crear Oscilador ('triangle' da un sonido más cálido tipo instrumento)
+                const oscillator = audioCtx.createOscillator();
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(frecuencia, inicio);
 
-      events.forEach((chord, i) => {
-        const t = i * stepDur;
-        chord.forEach(freq => {
-          if (freq <= 0) return;
-          const osc = oCtx.createOscillator();
-          const g = oCtx.createGain();
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(freq, t);
-          g.gain.setValueAtTime(0.0001, t);
-          g.gain.linearRampToValueAtTime(0.3, t + 0.01);
-          g.gain.exponentialRampToValueAtTime(0.0001, t + stepDur * 0.9);
-          osc.connect(g); g.connect(oCtx.destination);
-          osc.start(t); osc.stop(t + stepDur);
-        });
-      });
+                // 2. Nodo de Ganancia para controlar volumen (Ataque y Release)
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.setValueAtTime(0, inicio);
+                
+                // ATAQUE: Sube suavemente en 20 ms para evitar el "clic" seco inicial
+                gainNode.gain.linearRampToValueAtTime(0.4, inicio + 0.02);
 
-      const buf = await oCtx.startRendering();
-      const pcm = buf.getChannelData(0);
-      const wav = new DataView(new ArrayBuffer(44 + pcm.length * 2));
-      const wStr = (o, s) => [...s].forEach((c, i) => wav.setUint8(o + i, c.charCodeAt(0)));
+                // 3. Filtro pasa-bajos opcional para un sonido más dulce y menos metálico
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(2000, inicio);
 
-      wStr(0, 'RIFF'); wav.setUint32(4, 36 + pcm.length * 2, true); wStr(8, 'WAVEfmt ');
-      wav.setUint32(16, 16, true); wav.setUint16(20, 1, true); wav.setUint16(22, 1, true);
-      wav.setUint32(24, sr, true); wav.setUint32(28, sr * 2, true); wav.setUint16(32, 2, true);
-      wav.setUint16(34, 16, true); wStr(36, 'data'); wav.setUint32(40, pcm.length * 2, true);
-      pcm.forEach((s, i) => wav.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 32767, true));
+                // 4. Conexiones
+                oscillator.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
 
-      const blob = new Blob([wav], { type: 'audio/wav' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'bazilio_partitura.wav';
-      a.click();
-      st.textContent = '¡WAV Descargado!';
-    }
-  </script>
+                // 5. Iniciar y detener el oscilador con una caída (*release*) suave
+                oscillator.start(inicio);
+                
+                gainNode.gain.setValueAtTime(0.4, inicio + duracionNota);
+                // RELEASE: Baja el volumen gradualmente al terminar la nota
+                gainNode.gain.linearRampToValueAtTime(0, inicio + duracionNota + 0.1);
+
+                oscillator.stop(inicio + duracionNota + 0.1);
+            });
+
+            // Restablecer estado cuando termine la reproducción total
+            setTimeout(() => {
+                document.getElementById('estado').innerText = "¡Listo!";
+            }, (eventos.length * (duracionNota + pausaEntreNotas)) * 1000);
+        }
+    </script>
 </body>
 </html>
